@@ -135,6 +135,8 @@ INDEX_HTML = """<!DOCTYPE html>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
   <br>
   <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=">Share feedback</a>
+  <br>
+  &copy; 2026 Kristen Hassen. All rights reserved.
 </footer>
 </body></html>
 """
@@ -280,6 +282,8 @@ REPORT_HTML = """<!DOCTYPE html>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
   <br>
   <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=">Share feedback</a>
+  <br>
+  &copy; 2026 Kristen Hassen. All rights reserved.
 </footer>
 </body></html>
 """
