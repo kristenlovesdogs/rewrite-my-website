@@ -98,7 +98,7 @@ INDEX_HTML = """<!DOCTYPE html>
   {% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
 
   <div class="card">
-    <form method="POST" action="/review">
+    <form method="POST" action="/review" id="reviewForm">
       <label for="email">Your email</label>
       <input type="email" id="email" name="email" required placeholder="you@rescue.org">
 
@@ -106,9 +106,20 @@ INDEX_HTML = """<!DOCTYPE html>
       <input type="url" id="url" name="url" required placeholder="https://yourshelter.org/adopt">
 
       <div style="margin-top: 20px;">
-        <button type="submit">Review this page</button>
+        <button type="submit" id="submitBtn">Review this page</button>
+      </div>
+      <div id="loadingMsg" style="display:none; margin-top:18px; padding:14px 18px; background:var(--teal-light); border-left:4px solid var(--teal); border-radius:4px; color:var(--teal-dark);">
+        <strong>Reviewing your page...</strong> This takes about 30 to 60 seconds. Please don't close this tab.
       </div>
     </form>
+    <script>
+      document.getElementById('reviewForm').addEventListener('submit', function() {
+        var btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.innerText = 'Working on it...';
+        document.getElementById('loadingMsg').style.display = 'block';
+      });
+    </script>
   </div>
 
 </div>
