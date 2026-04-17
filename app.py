@@ -107,6 +107,11 @@ INDEX_HTML = """<!DOCTYPE html>
       <label for="url">Page URL to review</label>
       <input type="url" id="url" name="url" required placeholder="https://yourshelter.org/adopt">
 
+      <label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-top:18px; cursor:pointer;">
+        <input type="checkbox" id="check_links" name="check_links" value="1" style="width:18px; height:18px; margin:0;">
+        <span>Also check this page for broken links (adds about 10 to 30 seconds)</span>
+      </label>
+
       <div style="margin-top: 20px;">
         <button type="submit" id="submitBtn">Review this page</button>
       </div>
@@ -159,6 +164,11 @@ REPORT_HTML = """<!DOCTYPE html>
   .status-banner { padding: 12px 16px; border-radius: 4px; margin: 14px 0; font-weight: 500; }
   .status-banner.success { background: var(--sage-light); border-left: 4px solid var(--sage); color: var(--sage); }
   .status-banner.error { background: var(--warm-light); border-left: 4px solid var(--warm); color: #8a4a2e; }
+  .link-row { display: flex; gap: 12px; padding: 10px 12px; margin: 6px 0; background: #fff; border-left: 4px solid var(--warm); border-radius: 4px; }
+  .link-status { flex-shrink: 0; min-width: 70px; font-weight: 700; color: var(--warm); font-size: 14px; padding-top: 2px; }
+  .link-info { flex: 1; min-width: 0; }
+  .link-text { font-weight: 500; color: var(--text); margin-bottom: 2px; }
+  .link-info a { word-break: break-all; font-size: 14px; color: var(--muted); }
 </style></head><body>
 
 <header>
@@ -200,6 +210,29 @@ REPORT_HTML = """<!DOCTYPE html>
     <p>No recommendations.</p>
     {% endfor %}
   </div>
+
+  {% if link_results is not none %}
+  <h2>Broken Links</h2>
+  {% set broken = link_results | selectattr('status', 'ge', 400) | list + link_results | selectattr('status', 'eq', 0) | list %}
+  {% if broken %}
+  <div style="margin-bottom:12px; color:var(--warm);"><strong>{{ broken|length }} link(s) need attention out of {{ link_results|length }} checked.</strong></div>
+  <div class="links" id="linksBlock">
+    {% for r in link_results %}
+      {% if r.status == 0 or r.status >= 400 %}
+      <div class="link-row broken">
+        <div class="link-status">{% if r.status == 0 %}{{ r.note or 'failed' }}{% else %}{{ r.status }}{% endif %}</div>
+        <div class="link-info">
+          <div class="link-text">{{ r.text }}</div>
+          <a href="{{ r.url }}" target="_blank" rel="noopener">{{ r.url }}</a>
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p style="color:var(--sage);">All {{ link_results|length }} links checked are working.</p>
+  {% endif %}
+  {% endif %}
 
   <h2>Original Text</h2>
   <button onclick="document.getElementById('orig').classList.toggle('shown')">Show / Hide Original</button>
@@ -359,6 +392,32 @@ def generate_pdf_bytes(data: dict) -> bytes:
             pdf.set_text_color(31, 58, 58)
             _mc(pdf,14, _latin1_safe(r.get("note", "")))
             pdf.ln(4)
+
+    # Broken Links (if checked)
+    link_results = data.get("_link_results")
+    if link_results is not None:
+        pdf.ln(10)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(31, 95, 95)
+        pdf.cell(0, 20, "Broken Links", new_x="LMARGIN", new_y="NEXT")
+        broken = [r for r in link_results if r.get("status", 0) == 0 or r.get("status", 0) >= 400]
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(31, 58, 58)
+        if not broken:
+            _mc(pdf, 14, f"All {len(link_results)} links checked are working.")
+        else:
+            _mc(pdf, 14, f"{len(broken)} of {len(link_results)} links need attention:")
+            pdf.ln(4)
+            for r in broken:
+                s = r.get("status", 0)
+                label = (r.get("note") or "failed") if s == 0 else str(s)
+                pdf.set_font("Helvetica", "B", 10)
+                pdf.set_text_color(201, 123, 90)
+                pdf.cell(0, 12, _latin1_safe(f"[{label}] {r.get('text','')}"), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(90, 117, 117)
+                _mc(pdf, 12, _latin1_safe(r.get("url", "")))
+                pdf.ln(3)
 
     # Footer
     pdf.ln(12)
@@ -528,8 +587,9 @@ def review():
             notice=None, daily_limit=DAILY_LIMIT,
         )
 
+    check_links_flag = bool(request.form.get("check_links"))
     try:
-        data = review_page(url)
+        data = review_page(url, check_links_flag=check_links_flag)
     except Exception as e:
         app.logger.exception("Review failed")
         return render_template_string(
@@ -588,6 +648,7 @@ def report(report_id):
         email=esc(data.get("_email", "")),
         status_msg=status_msg,
         status_kind=status_kind,
+        link_results=data.get("_link_results"),
     )
 
 @app.route("/email-pdf/<report_id>", methods=["POST"])

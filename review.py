@@ -100,17 +100,80 @@ def fetch_page(url: str):
     r = requests.get(url, headers=headers, timeout=30)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
+
+    # Pull links BEFORE stripping nav/footer (shelters often have broken links in those)
+    links = _extract_links(soup, base_url=url)
+
     for tag in soup(["script", "style", "nav", "footer", "header"]):
         tag.decompose()
     main = soup.find("main") or soup.find(attrs={"role": "main"}) or soup.body or soup
     text = main.get_text("\n", strip=True)
     text = re.sub(r"\n{3,}", "\n\n", text)
     title = (soup.title.string if soup.title else "").strip()
-    return title, text
+    return title, text, links
 
 
-def review_page(url: str) -> dict:
-    title, text = fetch_page(url)
+def _extract_links(soup, base_url: str) -> list[tuple[str, str]]:
+    """Return a deduped list of (href, link_text) for external-looking hrefs."""
+    from urllib.parse import urljoin, urlparse
+    out = []
+    seen = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href or href.startswith(("#", "mailto:", "tel:", "javascript:", "sms:")):
+            continue
+        # Resolve relative URLs
+        full = urljoin(base_url, href)
+        parsed = urlparse(full)
+        if parsed.scheme not in ("http", "https"):
+            continue
+        # Dedupe by URL (ignore fragments)
+        key = full.split("#", 1)[0]
+        if key in seen:
+            continue
+        seen.add(key)
+        link_text = a.get_text(" ", strip=True)[:80] or "(no text)"
+        out.append((key, link_text))
+    return out
+
+
+def check_links(links: list[tuple[str, str]], max_workers: int = 10, timeout: int = 8) -> list[dict]:
+    """Check each link with HEAD (fallback GET). Returns list of {url, text, status, note}."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    headers = {"User-Agent": "Mozilla/5.0 (RewriteMyWebsite/1.0 LinkChecker)"}
+
+    def check(url: str, text: str):
+        try:
+            r = requests.head(url, headers=headers, timeout=timeout, allow_redirects=True)
+            # Some servers return 403/405 for HEAD; retry with GET
+            if r.status_code in (403, 405, 501) or r.status_code >= 500:
+                r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True)
+                r.close()
+            return {"url": url, "text": text, "status": r.status_code, "note": ""}
+        except requests.exceptions.Timeout:
+            return {"url": url, "text": text, "status": 0, "note": "timeout"}
+        except requests.exceptions.ConnectionError as e:
+            return {"url": url, "text": text, "status": 0, "note": "connection error"}
+        except Exception as e:
+            return {"url": url, "text": text, "status": 0, "note": type(e).__name__}
+
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(check, u, t) for u, t in links]
+        for fut in as_completed(futures):
+            results.append(fut.result())
+    # Sort broken first, then by status
+    def priority(r):
+        s = r["status"]
+        if s == 0 or s >= 400:
+            return (0, s)
+        return (1, s)
+    results.sort(key=priority)
+    return results
+
+
+def review_page(url: str, check_links_flag: bool = False) -> dict:
+    title, text, links = fetch_page(url)
     client = anthropic.Anthropic()
     msg = client.messages.create(
         model="claude-opus-4-5",
@@ -128,6 +191,10 @@ def review_page(url: str) -> dict:
     data = json.loads(raw)
     data["_original_text"] = text
     data["_url"] = url
+    if check_links_flag and links:
+        data["_link_results"] = check_links(links)
+    else:
+        data["_link_results"] = None
     return data
 
 
