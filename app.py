@@ -9,9 +9,11 @@ import csv
 import json
 import uuid
 import time
+import base64
 import secrets
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from io import BytesIO
 
 from flask import Flask, request, render_template_string, redirect, url_for, abort
 import requests
@@ -150,6 +152,13 @@ REPORT_HTML = """<!DOCTYPE html>
   .rec-type.structure { background: var(--teal); }
   .original { display: none; background: #f0f6f5; border: 1px dashed #9bbfbd; padding: 16px; margin-top: 12px; border-radius: 4px; white-space: pre-wrap; font-size: 14px; color: #3a5555; }
   .original.shown { display: block; }
+  .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 24px; }
+  .action-row button { background: var(--teal); color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 15px; font-weight: 600; }
+  .action-row button:hover { background: var(--teal-dark); }
+  .action-row button:disabled { background: #9bbfbd; cursor: not-allowed; }
+  .status-banner { padding: 12px 16px; border-radius: 4px; margin: 14px 0; font-weight: 500; }
+  .status-banner.success { background: var(--sage-light); border-left: 4px solid var(--sage); color: var(--sage); }
+  .status-banner.error { background: var(--warm-light); border-left: 4px solid var(--warm); color: #8a4a2e; }
 </style></head><body>
 
 <header>
@@ -169,7 +178,18 @@ REPORT_HTML = """<!DOCTYPE html>
   </div>
 
   <h2>Suggested Rewrite</h2>
-  <div class="rewrite">{{ rewrite_html|safe }}</div>
+  <div class="rewrite" id="rewriteBlock">{{ rewrite_html|safe }}</div>
+
+  {% if status_msg %}
+  <div class="status-banner {{ status_kind }}">{{ status_msg }}</div>
+  {% endif %}
+
+  <div class="action-row">
+    <button type="button" id="copyBtn" onclick="copyRewrite()">Copy rewrite to clipboard</button>
+    <form method="POST" action="/email-pdf/{{ report_id }}" style="display:inline;">
+      <button type="submit" id="emailBtn">Email me a PDF{% if email %} ({{ email }}){% endif %}</button>
+    </form>
+  </div>
 
   <h2>Recommendations</h2>
   <div class="recs">
@@ -184,8 +204,32 @@ REPORT_HTML = """<!DOCTYPE html>
   <button onclick="document.getElementById('orig').classList.toggle('shown')">Show / Hide Original</button>
   <div class="original" id="orig">{{ original_text }}</div>
 
-  <div style="margin-top:40px;"><a href="/" class="btn">← Review another page</a></div>
+  <div style="margin-top:40px;"><a href="/" class="btn">Back to start</a></div>
 </div>
+
+<script>
+  function copyRewrite() {
+    var block = document.getElementById('rewriteBlock');
+    var text = block.innerText || block.textContent;
+    navigator.clipboard.writeText(text).then(function() {
+      var btn = document.getElementById('copyBtn');
+      var original = btn.innerText;
+      btn.innerText = 'Copied!';
+      btn.disabled = true;
+      setTimeout(function() { btn.innerText = original; btn.disabled = false; }, 2000);
+    }, function() {
+      alert('Copy failed. You can select the text manually.');
+    });
+  }
+  var emailForm = document.querySelector('form[action^="/email-pdf/"]');
+  if (emailForm) {
+    emailForm.addEventListener('submit', function() {
+      var btn = document.getElementById('emailBtn');
+      btn.disabled = true;
+      btn.innerText = 'Sending...';
+    });
+  }
+</script>
 
 <footer>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
@@ -235,11 +279,182 @@ def save_email(email, url, report_id, ip):
         w = csv.writer(f)
         w.writerow([datetime.now(timezone.utc).isoformat(), email, url, report_id, ip])
 
-def send_report_email(to_email: str, report_url: str, page_url: str):
-    """Send report link via Resend. No-op if RESEND_API_KEY is not set."""
+def _mc(pdf, h, text):
+    """multi_cell that always returns the cursor to the left margin on the next line."""
+    pdf.multi_cell(w=0, h=h, text=text, new_x="LMARGIN", new_y="NEXT")
+
+
+def generate_pdf_bytes(data: dict) -> bytes:
+    """Render report data to a PDF using fpdf2 (pure Python, no system deps)."""
+    from fpdf import FPDF
+
+    pdf = FPDF(format="Letter", unit="pt")
+    pdf.set_auto_page_break(auto=True, margin=54)
+    pdf.set_margins(left=54, top=54, right=54)
+    pdf.add_page()
+
+    # Title
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(31, 95, 95)
+    pdf.cell(0, 26, "Rewrite My Website", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "I", 12)
+    pdf.set_text_color(59, 122, 87)
+    pdf.cell(0, 16, "A Tool for Animal Shelters and Rescues", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(8)
+
+    # Meta line
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(90, 117, 117)
+    _mc(pdf,12, _latin1_safe(f"Page reviewed: {data.get('_url','')}"))
+    pdf.ln(6)
+
+    # Summary
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(31, 95, 95)
+    pdf.cell(0, 14, "Summary", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(31, 58, 58)
+    _mc(pdf,15, _latin1_safe(data.get("summary", "")))
+    pdf.ln(6)
+
+    # Titles
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(59, 122, 87)
+    pdf.cell(0, 14, "Page Titles", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(31, 58, 58)
+    _mc(pdf,15, _latin1_safe(f"Current: {data.get('current_title','')}"))
+    _mc(pdf,15, _latin1_safe(f"Suggested: {data.get('suggested_title','')}"))
+    pdf.ln(10)
+
+    # Suggested Rewrite
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(31, 95, 95)
+    pdf.cell(0, 20, "Suggested Rewrite", new_x="LMARGIN", new_y="NEXT")
+    _render_markdown_to_pdf(pdf, data.get("rewrite_markdown", ""))
+    pdf.ln(10)
+
+    # Recommendations
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(31, 95, 95)
+    pdf.cell(0, 20, "Recommendations", new_x="LMARGIN", new_y="NEXT")
+    recs = data.get("recommendations", [])
+    if not recs:
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(31, 58, 58)
+        _mc(pdf,15, "No recommendations.")
+    else:
+        for r in recs:
+            pdf.set_font("Helvetica", "B", 9)
+            pdf.set_text_color(74, 127, 167)
+            label = r.get("type", "").replace("_", " ").upper()
+            pdf.cell(0, 12, _latin1_safe(label), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(31, 58, 58)
+            _mc(pdf,14, _latin1_safe(r.get("note", "")))
+            pdf.ln(4)
+
+    # Footer
+    pdf.ln(12)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_text_color(90, 117, 117)
+    _mc(pdf,12, "Created by Kristen Hassen of Outcomes for Pets.  outcomesforpets.com")
+
+    out = pdf.output()
+    return bytes(out) if not isinstance(out, bytes) else out
+
+
+def _render_markdown_to_pdf(pdf, md: str):
+    """Minimal markdown renderer for fpdf2: headings, bullets, numbered lists, blockquotes, paragraphs, bold."""
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(31, 58, 58)
+    lines = md.split("\n")
+    in_bq = False
+    for raw in lines:
+        line = raw.rstrip()
+        if not line.strip():
+            pdf.ln(4)
+            continue
+        if line.startswith("> "):
+            pdf.set_font("Helvetica", "I", 10)
+            pdf.set_text_color(44, 74, 102)
+            _mc(pdf,14, _latin1_safe(line[2:]))
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(31, 58, 58)
+            continue
+        if line.startswith("# "):
+            pdf.set_font("Helvetica", "B", 13)
+            pdf.set_text_color(31, 95, 95)
+            _mc(pdf,18, _latin1_safe(line[2:]))
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(31, 58, 58)
+            continue
+        if line.startswith("## "):
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.set_text_color(31, 95, 95)
+            _mc(pdf,17, _latin1_safe(line[3:]))
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(31, 58, 58)
+            continue
+        if line.startswith("### "):
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_text_color(31, 95, 95)
+            _mc(pdf,15, _latin1_safe(line[4:]))
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(31, 58, 58)
+            continue
+        if re.match(r"^\s*[-*]\s+", line):
+            item = re.sub(r"^\s*[-*]\s+", "", line)
+            _mc(pdf,14, f"  - {_strip_md(item)}")
+            continue
+        if re.match(r"^\s*\d+\.\s+", line):
+            item = re.sub(r"^\s*\d+\.\s+", "", line)
+            _mc(pdf,14, f"  - {_strip_md(item)}")
+            continue
+        _mc(pdf,14, _strip_md(line))
+
+
+def _strip_md(s: str) -> str:
+    s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
+    s = re.sub(r"\*(.+?)\*", r"\1", s)
+    return _latin1_safe(s)
+
+
+_PDF_REPLACEMENTS = {
+    "\u2014": "-",   # em dash
+    "\u2013": "-",   # en dash
+    "\u2018": "'", "\u2019": "'",     # curly single quotes
+    "\u201c": '"', "\u201d": '"',     # curly double quotes
+    "\u2026": "...",                  # ellipsis
+    "\u00a0": " ",                    # non-breaking space
+    "\u2022": "- ",                   # bullet
+    "\u2713": "*", "\u2714": "*",     # check marks
+    "\u2716": "x",                    # cross
+    "\u26a0": "!",                    # warning sign
+    "\u2696": "",                     # scales (legal)
+    "\u270d": "",                     # writing hand
+    "\u2705": "*",                    # white heavy check mark
+    "\u274c": "x",                    # cross mark
+    "\u2139": "i",                    # information
+    "\u2728": "*",                    # sparkles
+    "\u1f4a1": "*",                   # light bulb (shouldn't encode, but just in case)
+}
+
+
+def _latin1_safe(s):
+    if not s:
+        return ""
+    for k, v in _PDF_REPLACEMENTS.items():
+        s = s.replace(k, v)
+    # Any remaining non-latin-1 chars get dropped
+    return s.encode("latin-1", errors="replace").decode("latin-1").replace("?", "?")
+
+
+def send_pdf_email(to_email: str, pdf_bytes: bytes, page_url: str, report_url: str):
+    """Email the PDF as an attachment via Resend."""
     if not RESEND_API_KEY:
-        app.logger.info(f"[email skipped] Would have emailed {to_email} with {report_url}")
-        return
+        app.logger.info(f"[email skipped] Would have emailed PDF to {to_email}")
+        return False, "Email is not configured."
     try:
         resp = requests.post(
             "https://api.resend.com/emails",
@@ -247,20 +462,31 @@ def send_report_email(to_email: str, report_url: str, page_url: str):
             json={
                 "from": FROM_EMAIL,
                 "to": [to_email],
-                "subject": "Your website rewrite is ready",
+                "subject": "Your website rewrite",
                 "html": f"""
                     <p>Thanks for using <strong>Rewrite My Website</strong>.</p>
-                    <p>Your rewrite for <a href="{page_url}">{page_url}</a> is ready:</p>
-                    <p><a href="{report_url}" style="background:#2d8a8a;color:white;padding:10px 18px;text-decoration:none;border-radius:6px;display:inline-block;">View your rewrite</a></p>
-                    <p style="color:#5a7575;font-size:14px;">Full-site rewrites are coming soon. Reply to this email if you'd like early access.</p>
+                    <p>Attached is a PDF of your rewrite for <a href="{html_escape(page_url)}">{html_escape(page_url)}</a>.</p>
+                    <p>You can also view it online here: <a href="{html_escape(report_url)}">{html_escape(report_url)}</a></p>
+                    <p style="color:#5a7575; font-size:14px;">Full-site rewrites are coming soon. Reply to this email if you'd like early access.</p>
                 """,
+                "attachments": [{
+                    "filename": "website-rewrite.pdf",
+                    "content": base64.b64encode(pdf_bytes).decode("ascii"),
+                }],
             },
-            timeout=15,
+            timeout=30,
         )
         if resp.status_code >= 300:
             app.logger.warning(f"Resend error {resp.status_code}: {resp.text}")
+            return False, f"Email service returned error ({resp.status_code})."
+        return True, "Sent."
     except Exception as e:
         app.logger.warning(f"Failed to send email: {e}")
+        return False, "Failed to send email."
+
+
+def html_escape(s):
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def get_client_ip():
     # Render sets X-Forwarded-For
@@ -269,8 +495,7 @@ def get_client_ip():
         return fwd.split(",")[0].strip()
     return request.remote_addr or "unknown"
 
-def esc(s):
-    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+esc = html_escape
 
 # ==================== ROUTES ====================
 
@@ -308,15 +533,12 @@ def review():
         )
 
     report_id = secrets.token_urlsafe(8)
+    data["_email"] = email
     report_path = REPORTS / f"{report_id}.json"
     report_path.write_text(json.dumps(data))
 
     record_usage(ip)
     save_email(email, url, report_id, ip)
-
-    base = BASE_URL or request.host_url.rstrip("/")
-    report_url = f"{base}/report/{report_id}"
-    send_report_email(email, report_url, url)
 
     return redirect(url_for("report", report_id=report_id))
 
@@ -329,18 +551,60 @@ def report(report_id):
     if not path.exists():
         abort(404)
     data = json.loads(path.read_text())
+    status = request.args.get("status", "")
+    status_msg = ""
+    status_kind = ""
+    if status == "sent":
+        status_msg = f"Sent. Check {data.get('_email', 'your inbox')} for the PDF."
+        status_kind = "success"
+    elif status == "noemail":
+        status_msg = "No email on file for this report."
+        status_kind = "error"
+    elif status == "pdffail":
+        status_msg = "We couldn't generate the PDF. Try again, or copy the rewrite text instead."
+        status_kind = "error"
+    elif status == "emailfail":
+        status_msg = "We couldn't send the email. Please try again shortly."
+        status_kind = "error"
     return render_template_string(
         REPORT_HTML,
         css=PAGE_CSS,
+        report_id=report_id,
         current_title=esc(data.get("current_title", "")),
         suggested_title=esc(data.get("suggested_title", "")),
         url=esc(data["_url"]),
         summary=esc(data.get("summary", "")),
         page_type=esc(data.get("page_type", "")),
         rewrite_html=markdown_to_html(data.get("rewrite_markdown", "")),
+        rewrite_plain=data.get("rewrite_markdown", ""),
         recommendations=data.get("recommendations", []),
         original_text=esc(data["_original_text"]),
+        email=esc(data.get("_email", "")),
+        status_msg=status_msg,
+        status_kind=status_kind,
     )
+
+@app.route("/email-pdf/<report_id>", methods=["POST"])
+def email_pdf(report_id):
+    if not re.match(r"^[A-Za-z0-9_-]+$", report_id):
+        abort(404)
+    path = REPORTS / f"{report_id}.json"
+    if not path.exists():
+        abort(404)
+    data = json.loads(path.read_text())
+    email = data.get("_email")
+    if not email:
+        return redirect(url_for("report", report_id=report_id, status="noemail"))
+    try:
+        pdf_bytes = generate_pdf_bytes(data)
+    except Exception as e:
+        app.logger.exception("PDF generation failed")
+        return redirect(url_for("report", report_id=report_id, status="pdffail"))
+    base = BASE_URL or request.host_url.rstrip("/")
+    report_url = f"{base}/report/{report_id}"
+    ok, _ = send_pdf_email(email, pdf_bytes, data["_url"], report_url)
+    return redirect(url_for("report", report_id=report_id, status="sent" if ok else "emailfail"))
+
 
 @app.route("/healthz")
 def healthz():
