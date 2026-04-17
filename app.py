@@ -1,5 +1,5 @@
 """
-Rewrite My Website — Flask web app.
+Rewrite My Website: Flask web app.
 Run locally: python3 app.py
 Deploy on Render: gunicorn app:app
 """
@@ -78,7 +78,7 @@ ul.features li { margin: 8px 0; }
 INDEX_HTML = """<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rewrite My Website — A Tool for Animal Shelters and Rescues</title>
+<title>Rewrite My Website | A Tool for Animal Shelters and Rescues</title>
 <style>{{ css|safe }}</style>
 </head><body>
 <header>
@@ -88,11 +88,10 @@ INDEX_HTML = """<!DOCTYPE html>
 
 <div class="container">
   <div class="card">
-    <p>Your website is often the first — and sometimes only — impression someone has of your organization.
-    A warm, clear page can turn a curious visitor into an adopter, volunteer, or donor. A cold or confusing
-    one sends them elsewhere.</p>
-    <p>Paste a page from your website below. We'll send you back a friendlier, clearer rewrite — plus
-    recommendations to help the page work harder for the animals in your care.</p>
+    <p>Your website is often the first impression of your organization. Many animal shelter and rescue
+    websites are outdated, too long, or are simply not very welcoming. This tool fixes all of that.</p>
+    <p>Simply paste a URL from your website below. We'll send you back a friendlier, clearer rewrite,
+    plus recommendations to help the page work harder for the animals in your care.</p>
   </div>
 
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
@@ -116,23 +115,6 @@ INDEX_HTML = """<!DOCTYPE html>
     </form>
   </div>
 
-  <div class="card">
-    <h2 style="margin-top:0;">What you'll get</h2>
-    <ul class="features">
-      <li><strong>A rewrite</strong> in a warmer, clearer voice — without losing your facts or personality</li>
-      <li><strong>Preserved policies</strong> — anything tied to laws, ordinances, or legal requirements stays exactly as written</li>
-      <li><strong>A suggested page title</strong> that's clearer and more welcoming</li>
-      <li><strong>Recommendations</strong> that flag missing info, unnecessary barriers, and opportunities to reduce red tape</li>
-      <li><strong>A "before vs. after"</strong> view so you can compare</li>
-    </ul>
-  </div>
-
-  <div class="card">
-    <h2 style="margin-top:0;">Who this is for</h2>
-    <p>Animal shelters, rescues, and humane organizations of any size — especially teams without a
-    dedicated marketing or communications person. If your website pages have grown over the years into
-    long, rule-heavy walls of text, this tool is for you.</p>
-  </div>
 </div>
 
 <footer>
@@ -145,7 +127,7 @@ INDEX_HTML = """<!DOCTYPE html>
 REPORT_HTML = """<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rewrite My Website — {{ current_title }}</title>
+<title>Rewrite My Website | {{ current_title }}</title>
 <style>{{ css|safe }}
   .meta { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
   .summary { background: var(--teal-light); border-left: 4px solid var(--teal); padding: 16px 20px; margin: 20px 0; border-radius: 4px; }
@@ -306,7 +288,7 @@ def review():
     if not allowed:
         return render_template_string(
             INDEX_HTML, css=PAGE_CSS,
-            error=f"You've reached today's free limit of {DAILY_LIMIT} pages. Please check back tomorrow. Full-site rewrites are coming soon — reply to our email to join the waitlist.",
+            error=f"You've reached today's free limit of {DAILY_LIMIT} pages. Please check back tomorrow. Full-site rewrites are coming soon. Reply to our email to join the waitlist.",
             notice=None, daily_limit=DAILY_LIMIT,
         )
 

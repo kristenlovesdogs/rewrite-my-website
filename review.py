@@ -1,5 +1,5 @@
 """
-Rewrite My Website — page reviewer logic.
+Rewrite My Website: page reviewer logic.
 Importable module. Use review_page(url) -> dict.
 """
 import os
@@ -26,9 +26,9 @@ if _env_path.exists():
 RUBRIC = """You are reviewing a page from an animal shelter or rescue's website. Apply this rubric.
 
 TONE & VOICE
-- Warm, welcoming, human — not clinical or bureaucratic
+- Warm, welcoming, human, not clinical or bureaucratic
 - Never guilt-trip, shame, or lecture (especially surrenderers, finders, or people asking questions)
-- Thank the reader for visiting, caring, or helping — where natural, not performative
+- Thank the reader for visiting, caring, or helping, where natural and not performative
 - Assume good intent from every visitor
 
 CLARITY & CONCISION
@@ -36,6 +36,7 @@ CLARITY & CONCISION
 - Remove repetition and redundancy
 - Short paragraphs, short sentences, plain language (~8th grade reading level)
 - Replace jargon ("intake," "disposition") with human terms
+- NEVER use em dashes (—) in the rewrite. Use periods, commas, colons, or parentheses instead.
 
 COMPLETENESS
 - Flag pages that are too thin. Every page should answer: What is this? Who is it for? What do I do next? What happens after?
@@ -45,7 +46,7 @@ STRUCTURE & FLOW
 - Lead with welcome and the ask, not the rules. Requirements and red tape go lower on the page.
 - Reframe rules as help: "Here's what you'll need" instead of "You must provide…"
 - Every page has a clear primary ask or next step (one CTA)
-- Use bullets/numbers for instructions — never bury them in prose
+- Use bullets/numbers for instructions, never bury them in prose
 
 REDUCE RED TAPE
 - Flag excessive requirements, gatekeeping, or multi-step hoops
@@ -63,7 +64,7 @@ LANGUAGE TO FIX
 - Clinical ("euthanasia," "intake," "disposition") → humane alternatives
 - Cold closers → warm thank-you or invitation
 
-CRITICAL — DO NOT REWRITE
+CRITICAL: DO NOT REWRITE
 - Sections tied to laws, ordinances, or required legal disclosures (bite holds, rabies quarantine, licensing, stray holds)
 - Official policies (adoption contracts, surrender agreements, return policies)
 - Medical/veterinary protocols
