@@ -108,10 +108,6 @@ INDEX_HTML = """<!DOCTYPE html>
       <div style="margin-top: 20px;">
         <button type="submit">Review this page</button>
       </div>
-      <div class="fineprint">
-        Free: one page at a time. We'll email your rewrite as soon as it's ready.
-        Limit {{ daily_limit }} pages per day. <strong>Full-site rewrites coming soon.</strong>
-      </div>
     </form>
   </div>
 
