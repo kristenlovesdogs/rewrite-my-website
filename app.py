@@ -185,14 +185,15 @@ REPORT_HTML = """<!DOCTYPE html>
   {% endif %}
 
   <div class="action-row">
-    <button type="button" id="copyBtn" onclick="copyRewrite()">Copy rewrite to clipboard</button>
+    <button type="button" id="copyRewriteBtn" onclick="copyText('rewrite')">Copy rewrite</button>
+    <button type="button" id="copyFullBtn" onclick="copyText('full')">Copy rewrite + recommendations</button>
     <form method="POST" action="/email-pdf/{{ report_id }}" style="display:inline;">
       <button type="submit" id="emailBtn">Email me a PDF{% if email %} ({{ email }}){% endif %}</button>
     </form>
   </div>
 
   <h2>Recommendations</h2>
-  <div class="recs">
+  <div class="recs" id="recsBlock">
     {% for r in recommendations %}
     <div class="rec"><span class="rec-type {{ r.type }}">{{ r.type.replace('_',' ') }}</span>{{ r.note }}</div>
     {% else %}
@@ -208,11 +209,16 @@ REPORT_HTML = """<!DOCTYPE html>
 </div>
 
 <script>
-  function copyRewrite() {
-    var block = document.getElementById('rewriteBlock');
-    var text = block.innerText || block.textContent;
+  function copyText(mode) {
+    var rewrite = document.getElementById('rewriteBlock').innerText || '';
+    var text = rewrite;
+    if (mode === 'full') {
+      var recs = document.getElementById('recsBlock').innerText || '';
+      text = 'SUGGESTED REWRITE\n\n' + rewrite + '\n\n\nRECOMMENDATIONS\n\n' + recs;
+    }
+    var btnId = mode === 'full' ? 'copyFullBtn' : 'copyRewriteBtn';
+    var btn = document.getElementById(btnId);
     navigator.clipboard.writeText(text).then(function() {
-      var btn = document.getElementById('copyBtn');
       var original = btn.innerText;
       btn.innerText = 'Copied!';
       btn.disabled = true;
