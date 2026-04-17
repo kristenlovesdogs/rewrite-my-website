@@ -133,6 +133,8 @@ INDEX_HTML = """<!DOCTYPE html>
 
 <footer>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
+  <br>
+  <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=">Share feedback</a>
 </footer>
 </body></html>
 """
@@ -238,7 +240,11 @@ REPORT_HTML = """<!DOCTYPE html>
   <button onclick="document.getElementById('orig').classList.toggle('shown')">Show / Hide Original</button>
   <div class="original" id="orig">{{ original_text }}</div>
 
-  <div style="margin-top:40px;"><a href="/" class="btn">Back to start</a></div>
+  <div style="margin-top:40px; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+    <a href="/" class="btn">Back to start</a>
+    <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=Tell%20Kristen%20what%20you%20thought%20of%20the%20rewrite%3A%0A%0AWhat%20worked%3F%0A%0AWhat%20didn%27t%3F%0A%0AWhat%20would%20you%20want%20next%3F%0A%0A"
+       class="btn" style="background:var(--sage);">Share feedback</a>
+  </div>
 </div>
 
 <script>
@@ -272,6 +278,8 @@ REPORT_HTML = """<!DOCTYPE html>
 
 <footer>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
+  <br>
+  <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=">Share feedback</a>
 </footer>
 </body></html>
 """
