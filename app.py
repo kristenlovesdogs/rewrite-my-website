@@ -118,7 +118,6 @@ INDEX_HTML = """<!DOCTYPE html>
 </div>
 
 <footer>
-  Built with care for the animals and the people who help them.<br>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
 </footer>
 </body></html>
@@ -182,7 +181,6 @@ REPORT_HTML = """<!DOCTYPE html>
 </div>
 
 <footer>
-  Built with care for the animals and the people who help them.<br>
   Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
 </footer>
 </body></html>
