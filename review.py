@@ -41,6 +41,8 @@ CLARITY & CONCISION
 COMPLETENESS
 - Flag pages that are too thin. Every page should answer: What is this? Who is it for? What do I do next? What happens after?
 - If key info is missing, note it in the rewrite as [NEEDS: ___]
+- NEVER invent facts, services, hours, phone numbers, addresses, or programs that are not in the source text. If a page is mostly navigation/widgets with little real copy, say so clearly in the summary and keep the rewrite limited to what is actually on the page.
+- If there is essentially no content to rewrite (page is empty, a widget shell, or just a navigation stub), do NOT fabricate one. The rewrite_markdown should explicitly state that the page has little or no content to rewrite, and the recommendations should focus on what the shelter needs to add.
 
 STRUCTURE & FLOW
 - Lead with welcome and the ask, not the rules. Requirements and red tape go lower on the page.
@@ -101,15 +103,47 @@ def fetch_page(url: str):
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # Pull links BEFORE stripping nav/footer (shelters often have broken links in those)
+    # Pull links BEFORE stripping anything (shelters often have broken links in nav/footer)
     links = _extract_links(soup, base_url=url)
 
-    for tag in soup(["script", "style", "nav", "footer", "header"]):
+    # Strip only script/style/noscript first (always safe to remove)
+    for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
-    main = soup.find("main") or soup.find(attrs={"role": "main"}) or soup.body or soup
-    text = main.get_text("\n", strip=True)
-    text = re.sub(r"\n{3,}", "\n\n", text)
+
     title = (soup.title.string if soup.title else "").strip()
+
+    # Try narrower containers first
+    candidates = [
+        soup.find("main"),
+        soup.find(attrs={"role": "main"}),
+        soup.find("article"),
+        soup.find(id=re.compile(r"(content|main)", re.I)),
+        soup.find(class_=re.compile(r"(content|main)", re.I)),
+    ]
+    best = None
+    best_len = 0
+    for c in candidates:
+        if not c:
+            continue
+        t = c.get_text(" ", strip=True)
+        if len(t) > best_len:
+            best = c
+            best_len = len(t)
+
+    MIN_CONTENT_CHARS = 300
+    if best and best_len >= MIN_CONTENT_CHARS:
+        # Strip nav/footer/header from inside the chosen container
+        container = best
+        for tag in container(["nav", "footer", "header"]):
+            tag.decompose()
+        text = container.get_text("\n", strip=True)
+    else:
+        # Main container was empty or too thin. Use full body, keep nav/header/footer
+        # because on thin sites those contain the actual visible content.
+        source = soup.body or soup
+        text = source.get_text("\n", strip=True)
+
+    text = re.sub(r"\n{3,}", "\n\n", text)
     return title, text, links
 
 
