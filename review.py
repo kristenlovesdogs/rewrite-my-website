@@ -321,7 +321,7 @@ def review_page(url: str, check_links_flag: bool = False, use_site_context: bool
                 "Suggest pages that should be added if they appear to be missing."
             )
     msg = client.messages.create(
-        model="claude-opus-4-5",
+        model="claude-opus-4-7",
         max_tokens=4096,
         system=RUBRIC,
         messages=[{
