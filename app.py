@@ -19,19 +19,22 @@ from flask import Flask, request, render_template_string, redirect, url_for, abo
 import requests
 
 from review import review_page, markdown_to_html
+import storage
 
 app = Flask(__name__)
 
-# --- Paths ---
+# Initialize storage (creates Postgres tables if DATABASE_URL is set)
+try:
+    storage.init_schema()
+except Exception as _e:
+    app.logger.warning(f"storage.init_schema() failed: {_e}")
+
+# --- Paths (still used for the lasterror.txt file) ---
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
 REPORTS = DATA / "reports"
-EMAILS_CSV = DATA / "emails.csv"
-IP_LOG = DATA / "ip_usage.json"
 DATA.mkdir(exist_ok=True)
 REPORTS.mkdir(exist_ok=True)
-if not EMAILS_CSV.exists():
-    EMAILS_CSV.write_text("timestamp,email,url,report_id,ip\n")
 
 # --- Config ---
 DAILY_LIMIT = 5
@@ -308,45 +311,15 @@ REPORT_HTML = """<!DOCTYPE html>
 
 # ==================== HELPERS ====================
 
-def load_ip_log():
-    if not IP_LOG.exists():
-        return {}
-    try:
-        return json.loads(IP_LOG.read_text())
-    except Exception:
-        return {}
-
-def save_ip_log(data):
-    IP_LOG.write_text(json.dumps(data))
-
-def check_rate_limit(ip: str) -> tuple[bool, int]:
-    """Returns (allowed, remaining)."""
-    log = load_ip_log()
-    today = datetime.now(timezone.utc).date().isoformat()
-    entry = log.get(ip, {})
-    if entry.get("date") != today:
-        entry = {"date": today, "count": 0}
-    allowed = entry["count"] < DAILY_LIMIT
-    remaining = max(0, DAILY_LIMIT - entry["count"])
-    return allowed, remaining
+# Rate limiting and email/report storage now delegate to the storage module
+def check_rate_limit(ip: str):
+    return storage.check_rate_limit(ip, daily_limit=DAILY_LIMIT)
 
 def record_usage(ip: str):
-    log = load_ip_log()
-    today = datetime.now(timezone.utc).date().isoformat()
-    entry = log.get(ip, {"date": today, "count": 0})
-    if entry.get("date") != today:
-        entry = {"date": today, "count": 0}
-    entry["count"] += 1
-    log[ip] = entry
-    # prune old entries (>7 days)
-    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=7)).isoformat()
-    log = {k: v for k, v in log.items() if v.get("date", "0") >= cutoff}
-    save_ip_log(log)
+    storage.record_usage(ip)
 
 def save_email(email, url, report_id, ip):
-    with EMAILS_CSV.open("a", newline="") as f:
-        w = csv.writer(f)
-        w.writerow([datetime.now(timezone.utc).isoformat(), email, url, report_id, ip])
+    storage.save_email(email, url, report_id, ip)
 
 def _mc(pdf, h, text):
     """multi_cell that always returns the cursor to the left margin on the next line."""
@@ -658,8 +631,7 @@ def review():
 
     report_id = secrets.token_urlsafe(8)
     data["_email"] = email
-    report_path = REPORTS / f"{report_id}.json"
-    report_path.write_text(json.dumps(data))
+    storage.save_report(report_id, data)
 
     record_usage(ip)
     save_email(email, url, report_id, ip)
@@ -671,10 +643,9 @@ def report(report_id):
     # sanitize
     if not re.match(r"^[A-Za-z0-9_-]+$", report_id):
         abort(404)
-    path = REPORTS / f"{report_id}.json"
-    if not path.exists():
+    data = storage.load_report(report_id)
+    if data is None:
         abort(404)
-    data = json.loads(path.read_text())
     status = request.args.get("status", "")
     status_msg = ""
     status_kind = ""
@@ -716,10 +687,9 @@ def report(report_id):
 def email_pdf(report_id):
     if not re.match(r"^[A-Za-z0-9_-]+$", report_id):
         abort(404)
-    path = REPORTS / f"{report_id}.json"
-    if not path.exists():
+    data = storage.load_report(report_id)
+    if data is None:
         abort(404)
-    data = json.loads(path.read_text())
     email = data.get("_email")
     if not email:
         return redirect(url_for("report", report_id=report_id, status="noemail"))

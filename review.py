@@ -23,6 +23,113 @@ if _env_path.exists():
         if val and not os.environ.get(k.strip()):
             os.environ[k.strip()] = val
 
+PAGE_TYPE_GUIDANCE = {
+    "adoption": """
+ADOPTION PAGE SPECIFIC GUIDANCE
+- Lead with the animals, not with the rules. The first thing visitors should see is the invitation to meet pets, not the application requirements.
+- Frame requirements as "what helps your application" rather than "what we require."
+- Avoid language that screens out renters, apartment dwellers, first-time adopters, and lower-income households unless legally required.
+- Consider open or conversation-based adoption practices over rigid checklists. Suggest moving to these if the page reads as gatekeeping.
+- The fee should appear early but not first; never bury it.
+- Add a clear, warm CTA: "Meet our pets," "Apply to adopt [Pet Name]," or similar.
+""",
+    "surrender": """
+SURRENDER PAGE SPECIFIC GUIDANCE
+- This is the hardest page on most shelter websites because the visitor is in distress. Use the warmest possible tone.
+- Never use shaming language: no "abandonment," "giving up," "dumping," "irresponsible." These words drive people away or to worse outcomes.
+- Frame the page as "We're here to help you find the right path for your pet." Many surrenders can be diverted with the right resources.
+- Lead with rehoming alternatives (Adopt-a-Pet Rehome, Home To Home, Get Your Pet) before describing shelter intake. Most pets do better staying out of the shelter system.
+- Be honest about wait times, fees, and outcomes without being clinical.
+- Include behavioral, financial, and medical resources that may prevent surrender (food banks, low-cost vet care, training help).
+""",
+    "lost_found": """
+LOST & FOUND PAGE SPECIFIC GUIDANCE
+- Speed and clarity matter most. People on this page are panicked.
+- Lead with the action: "Lost a pet? Start here." Numbered, scannable steps.
+- Strongly recommend integrating Petco Love Lost (free facial recognition) and Pawboost.
+- Make the shelter's lost pet hotline number prominent.
+- Separate "I lost a pet" and "I found a pet" flows clearly. Don't combine them.
+- Cover: stray hold periods, where to file a report, where to look (kennel hours), microchip lookup options.
+""",
+    "foster": """
+FOSTER PAGE SPECIFIC GUIDANCE
+- Emphasize the variety of fostering: short-term, medical, behavioral, kittens, seniors, "sleepovers." Many people don't realize foster comes in flexible commitments.
+- Lead with "we provide everything" (food, supplies, vet care). Cost is the #1 barrier.
+- Make the application low-friction. If it's long, suggest shortening or splitting into stages.
+- Be specific about time commitment per foster type.
+- Include a clear invitation: "Foster for a weekend," "Foster a kitten litter," etc.
+""",
+    "volunteer": """
+VOLUNTEER PAGE SPECIFIC GUIDANCE
+- Emphasize the variety of ways to help, especially non-direct-animal options (admin, fundraising, transport, photography, social media).
+- Be clear about minimum age, time commitment, and training requirements without making them sound like barriers.
+- Recommend SignUpGenius, Better Impact, or Volunteer Local for shift management if not already in use.
+- Include a youth/family pathway if possible. Families want to volunteer together.
+""",
+    "donate": """
+DONATE PAGE SPECIFIC GUIDANCE
+- Lead with impact, not the donate button. "$25 covers a vaccine. $100 covers a spay surgery. $500 sponsors a pet's full care."
+- Show multiple ways to give: one-time, monthly, in-kind (Amazon wishlist), planned giving, vehicle donation.
+- Make the actual donation form fast. Recommend Donorbox, GiveButter, or Bloomerang if the current form is clunky.
+- Include 501(c)(3) status and EIN for tax-deductibility transparency.
+- Recurring/monthly donor options should be visually equal to one-time.
+""",
+    "about": """
+ABOUT PAGE SPECIFIC GUIDANCE
+- Make the mission concrete. Replace "to promote animal welfare" with specifics: how many animals, what services, what outcomes.
+- Include real numbers if available (live release rate, animals served per year, years in operation).
+- Introduce the team with warmth, not just titles.
+- Include links to specific service pages so visitors can take action.
+""",
+    "contact": """
+CONTACT PAGE SPECIFIC GUIDANCE
+- Hours, phone, address, email should be the first things visible. Don't bury them.
+- Include holiday hours and any temporary closures.
+- Provide separate contacts for: adoption, lost & found, surrender, media, donations.
+- Include a map or directions link.
+""",
+    "other": "",
+}
+
+
+TOOL_CATALOG = {
+    "adoption": [
+        {"name": "Petfinder", "url": "https://www.petfinder.com/", "what": "Free adoptable-pet listings widget"},
+        {"name": "Adopt-a-Pet", "url": "https://www.adoptapet.com/", "what": "Free adoptable-pet listings"},
+        {"name": "Best Friends Network", "url": "https://network.bestfriends.org/", "what": "Free network membership and resources"},
+    ],
+    "surrender": [
+        {"name": "Adopt-a-Pet Rehome", "url": "https://rehome.adoptapet.com/", "what": "Free peer-to-peer rehoming platform; keeps pets out of shelters"},
+        {"name": "Home To Home", "url": "https://home-home.org/", "what": "Free pet rehoming network; widget for shelter sites"},
+        {"name": "Get Your Pet", "url": "https://www.getyourpet.com/", "what": "Direct adoption network; alternative to surrender"},
+    ],
+    "lost_found": [
+        {"name": "Petco Love Lost", "url": "https://lost.petcolove.org/", "what": "Free facial recognition for lost pets; can embed on shelter sites"},
+        {"name": "Pawboost", "url": "https://www.pawboost.com/", "what": "Free lost pet alerts to local network"},
+        {"name": "Pet FBI", "url": "https://petfbi.org/", "what": "Free lost & found pet database"},
+        {"name": "Finding Rover", "url": "https://findingrover.com/", "what": "Facial recognition pet finding platform"},
+    ],
+    "foster": [
+        {"name": "Doobert", "url": "https://www.doobert.com/", "what": "Foster, transport, and volunteer coordination platform"},
+        {"name": "JotForm foster app templates", "url": "https://www.jotform.com/form-templates/foster-application-form", "what": "Free customizable foster application forms"},
+    ],
+    "volunteer": [
+        {"name": "SignUpGenius", "url": "https://www.signupgenius.com/", "what": "Free volunteer shift signups"},
+        {"name": "Better Impact", "url": "https://www.betterimpact.com/", "what": "Volunteer management platform"},
+        {"name": "Volunteer Local", "url": "https://www.volunteerlocal.com/", "what": "Volunteer scheduling and management"},
+    ],
+    "donate": [
+        {"name": "Donorbox", "url": "https://donorbox.org/", "what": "Easy embedded donation forms with monthly options"},
+        {"name": "GiveButter", "url": "https://givebutter.com/", "what": "Free fundraising platform with peer-to-peer features"},
+        {"name": "Bloomerang", "url": "https://bloomerang.co/", "what": "Donor management and recurring giving"},
+        {"name": "Amazon Wishlist", "url": "https://www.amazon.com/wishlist/", "what": "Free in-kind donation collection"},
+    ],
+    "about": [],
+    "contact": [],
+    "other": [],
+}
+
+
 RUBRIC = """You are reviewing a page from an animal shelter or rescue's website. Apply this rubric.
 
 TONE & VOICE
@@ -301,9 +408,30 @@ def check_links(links: list[tuple[str, str]], max_workers: int = 10, timeout: in
     return results
 
 
+def _build_page_guidance_block() -> str:
+    parts = ["\n\nPAGE-TYPE-SPECIFIC GUIDANCE\nApply the section that matches the page's type. Pick the page type that best fits the actual content.\n"]
+    for ptype, guidance in PAGE_TYPE_GUIDANCE.items():
+        if guidance.strip():
+            parts.append(guidance)
+    return "\n".join(parts)
+
+
+def _build_tool_catalog_block() -> str:
+    parts = ["\n\nFREE OR LOW-COST TOOLS YOU CAN RECOMMEND\nWhen relevant to the page type, suggest these as 'tool_or_link' recommendations. Only recommend tools that genuinely fit the page; do not stuff every tool into every report. When you recommend a tool, briefly say WHY it fits this specific page.\n"]
+    for ptype, tools in TOOL_CATALOG.items():
+        if not tools:
+            continue
+        parts.append(f"\nFor {ptype} pages:")
+        for t in tools:
+            parts.append(f"- {t['name']} ({t['url']}): {t['what']}")
+    return "\n".join(parts)
+
+
 def review_page(url: str, check_links_flag: bool = False, use_site_context: bool = False) -> dict:
     title, text, links = fetch_page(url)
     client = anthropic.Anthropic()
+    page_guidance = _build_page_guidance_block()
+    tool_catalog = _build_tool_catalog_block()
 
     site_context = ""
     site_map = []
@@ -320,10 +448,11 @@ def review_page(url: str, check_links_flag: bool = False, use_site_context: bool
                 "instead of duplicating content. Flag information that contradicts or duplicates other pages. "
                 "Suggest pages that should be added if they appear to be missing."
             )
+    full_system = RUBRIC + page_guidance + tool_catalog
     msg = client.messages.create(
         model="claude-opus-4-7",
         max_tokens=4096,
-        system=RUBRIC,
+        system=full_system,
         messages=[{
             "role": "user",
             "content": f"Page title: {title}\nURL: {url}\n\nPage content:\n---\n{text}\n---{site_context}\n\nReview and return the JSON as specified."
