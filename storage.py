@@ -61,6 +61,17 @@ def init_schema():
                     count INTEGER NOT NULL DEFAULT 0
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS waitlist (
+                    id BIGSERIAL PRIMARY KEY,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    email TEXT NOT NULL,
+                    org_name TEXT,
+                    website_url TEXT,
+                    note TEXT,
+                    ip TEXT
+                )
+            """)
         conn.commit()
 
 
@@ -110,6 +121,30 @@ def save_email(email: str, url: str, report_id: str, ip: str):
     else:
         with EMAILS_CSV.open("a", newline="") as f:
             csv.writer(f).writerow([datetime.now(timezone.utc).isoformat(), email, url, report_id, ip])
+
+
+# ============== Waitlist ==============
+
+WAITLIST_CSV = DATA / "waitlist.csv"
+if not WAITLIST_CSV.exists():
+    WAITLIST_CSV.write_text("timestamp,email,org_name,website_url,note,ip\n")
+
+
+def add_to_waitlist(email: str, org_name: str, website_url: str, note: str, ip: str):
+    if USE_POSTGRES:
+        with _connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO waitlist (email, org_name, website_url, note, ip) VALUES (%s, %s, %s, %s, %s)",
+                    (email, org_name, website_url, note, ip),
+                )
+            conn.commit()
+    else:
+        with WAITLIST_CSV.open("a", newline="") as f:
+            csv.writer(f).writerow([
+                datetime.now(timezone.utc).isoformat(),
+                email, org_name, website_url, note, ip,
+            ])
 
 
 # ============== Rate limiting ==============

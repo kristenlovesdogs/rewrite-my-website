@@ -76,6 +76,13 @@ button:disabled { background: #9bbfbd; cursor: not-allowed; }
   border-radius: 4px; margin: 20px 0; }
 .error { background: var(--warm-light); border-left: 4px solid var(--warm); padding: 14px 18px;
   border-radius: 4px; margin: 20px 0; }
+.promo { background: linear-gradient(135deg, #f0f7f3 0%, #eaf3ee 100%);
+  border: 1px solid #b9d6c4; border-radius: 8px; padding: 20px 24px; margin: 24px 0; }
+.promo h3 { margin: 0 0 6px 0; color: var(--sage); font-size: 18px; }
+.promo p { margin: 4px 0 12px 0; color: var(--text); }
+.promo a.promo-link { display: inline-block; background: var(--sage); color: white;
+  padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 14px; }
+.promo a.promo-link:hover { background: #2d6045; }
 footer { text-align: center; color: var(--muted); font-size: 14px; padding: 40px 20px; }
 ul.features li { margin: 8px 0; }
 """
@@ -137,6 +144,12 @@ INDEX_HTML = """<!DOCTYPE html>
     </script>
   </div>
 
+  <div class="promo">
+    <h3>Want your whole site rewritten?</h3>
+    <p>Full Site Rewrite covers every page on your site, plus a sitemap recommendation, broken link report, SEO meta descriptions, and tool integration suggestions. Delivered as a PDF within 3 business days.</p>
+    <a class="promo-link" href="/waitlist">Join the waitlist</a>
+  </div>
+
 </div>
 
 <footer>
@@ -148,6 +161,75 @@ INDEX_HTML = """<!DOCTYPE html>
 </footer>
 </body></html>
 """
+
+WAITLIST_HTML = """<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Full Site Rewrite | Rewrite My Website</title>
+<style>{{ css|safe }}</style>
+</head><body>
+<header>
+  <h1>Rewrite My Website</h1>
+  <div class="tagline">A Tool for Animal Shelters and Rescues</div>
+</header>
+
+<div class="container">
+  {% if submitted %}
+    <div class="card">
+      <h2 style="margin-top:0;">You're on the list.</h2>
+      <p>Thanks for signing up. We'll email <strong>{{ email }}</strong> when the Full Site Rewrite service launches, with pricing and how to book.</p>
+      <p>In the meantime, you can keep using the free single-page tool.</p>
+      <div style="margin-top:24px;"><a href="/" class="btn">Back to start</a></div>
+    </div>
+  {% else %}
+    <div class="card">
+      <h2 style="margin-top:0;">Full Site Rewrite</h2>
+      <p>Get every page on your website rewritten in a friendlier, clearer voice, plus:</p>
+      <ul style="line-height:1.7;">
+        <li>Page-by-page recommendations and tool/integration suggestions</li>
+        <li>A sitemap recommendation: which pages your site should have and how to organize navigation</li>
+        <li>A broken link report</li>
+        <li>Suggested SEO meta descriptions for every page</li>
+        <li>Delivered as a single PDF, plus a CSV of broken links, within 3 business days</li>
+        <li>Each rewrite is human-reviewed by Kristen before delivery</li>
+      </ul>
+      <p style="color:var(--muted);">Pricing announced at launch. Join the waitlist below and you'll be the first to hear.</p>
+    </div>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <div class="card">
+      <form method="POST" action="/waitlist">
+        <label for="email">Your email</label>
+        <input type="email" id="email" name="email" required placeholder="you@rescue.org" value="{{ email }}">
+
+        <label for="org_name">Organization name</label>
+        <input type="text" id="org_name" name="org_name" placeholder="Your Shelter or Rescue" value="{{ org_name }}">
+
+        <label for="website_url">Your website</label>
+        <input type="url" id="website_url" name="website_url" placeholder="https://yourshelter.org" value="{{ website_url }}">
+
+        <label for="note">Anything you'd like us to know? (optional)</label>
+        <textarea id="note" name="note" rows="3" style="width:100%; padding:10px 12px; font-size:16px; border:1px solid #b9d6c4; border-radius:6px; font-family:inherit;">{{ note }}</textarea>
+
+        <div style="margin-top:20px;">
+          <button type="submit">Join the waitlist</button>
+        </div>
+      </form>
+    </div>
+  {% endif %}
+</div>
+
+<footer>
+  Created by Kristen Hassen of <a href="https://www.outcomesforpets.com" target="_blank" rel="noopener">Outcomes for Pets</a>.
+  <br>
+  <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=">Share feedback</a>
+  <br>
+  &copy; 2026 Kristen Hassen. All rights reserved.
+</footer>
+</body></html>
+"""
+
 
 REPORT_HTML = """<!DOCTYPE html>
 <html lang="en"><head>
@@ -263,7 +345,13 @@ REPORT_HTML = """<!DOCTYPE html>
   <button onclick="document.getElementById('orig').classList.toggle('shown')">Show / Hide Original</button>
   <div class="original" id="orig">{{ original_text }}</div>
 
-  <div style="margin-top:40px; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
+  <div class="promo" style="margin-top:36px;">
+    <h3>Want your whole site rewritten?</h3>
+    <p>Like what you see for one page? Full Site Rewrite covers every page on your site, plus a sitemap recommendation, broken link report, SEO meta descriptions, and tool integration suggestions. Delivered as a PDF within 3 business days.</p>
+    <a class="promo-link" href="/waitlist?email={{ email }}&website_url={{ url }}">Join the waitlist</a>
+  </div>
+
+  <div style="margin-top:24px; display:flex; flex-wrap:wrap; gap:12px; align-items:center;">
     <a href="/" class="btn">Back to start</a>
     <a href="mailto:kristen@outcomesforpets.com?subject=Feedback%20on%20Rewrite%20My%20Website&body=Tell%20Kristen%20what%20you%20thought%20of%20the%20rewrite%3A%0A%0AWhat%20worked%3F%0A%0AWhat%20didn%27t%3F%0A%0AWhat%20would%20you%20want%20next%3F%0A%0A"
        class="btn" style="background:var(--sage);">Share feedback</a>
@@ -707,6 +795,48 @@ def email_pdf(report_id):
     err_path = REPORTS / f"{report_id}.lasterror.txt"
     err_path.write_text(msg)
     return redirect(url_for("report", report_id=report_id, status="emailfail"))
+
+
+@app.route("/waitlist", methods=["GET", "POST"])
+def waitlist():
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip()
+        org_name = (request.form.get("org_name") or "").strip()
+        website_url = (request.form.get("website_url") or "").strip()
+        note = (request.form.get("note") or "").strip()
+        ip = get_client_ip()
+        if not email or "@" not in email:
+            return render_template_string(
+                WAITLIST_HTML, css=PAGE_CSS,
+                error="Please enter a valid email.",
+                email=email, org_name=org_name, website_url=website_url, note=note,
+                submitted=False,
+            )
+        try:
+            storage.add_to_waitlist(email, org_name, website_url, note, ip)
+        except Exception as e:
+            app.logger.exception("Waitlist save failed")
+            return render_template_string(
+                WAITLIST_HTML, css=PAGE_CSS,
+                error="Something went wrong on our end. Please try again in a moment.",
+                email=email, org_name=org_name, website_url=website_url, note=note,
+                submitted=False,
+            )
+        return render_template_string(
+            WAITLIST_HTML, css=PAGE_CSS,
+            error=None, email=email, org_name=org_name, website_url=website_url, note=note,
+            submitted=True,
+        )
+    # GET: show the form, prefilling from query string if present
+    return render_template_string(
+        WAITLIST_HTML, css=PAGE_CSS,
+        error=None,
+        email=request.args.get("email", ""),
+        org_name=request.args.get("org_name", ""),
+        website_url=request.args.get("website_url", ""),
+        note="",
+        submitted=False,
+    )
 
 
 @app.route("/healthz")
