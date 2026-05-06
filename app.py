@@ -112,6 +112,11 @@ INDEX_HTML = """<!DOCTYPE html>
         <span>Also check this page for broken links (adds about 10 to 30 seconds)</span>
       </label>
 
+      <label style="display:flex; align-items:center; gap:8px; font-weight:400; margin-top:10px; cursor:pointer;">
+        <input type="checkbox" id="use_site_context" name="use_site_context" value="1" style="width:18px; height:18px; margin:0;">
+        <span>Look at other pages on my site for smarter recommendations (adds about 30 to 60 seconds)</span>
+      </label>
+
       <div style="margin-top: 20px;">
         <button type="submit" id="submitBtn">Review this page</button>
       </div>
@@ -173,6 +178,9 @@ REPORT_HTML = """<!DOCTYPE html>
   .link-info { flex: 1; min-width: 0; }
   .link-text { font-weight: 500; color: var(--text); margin-bottom: 2px; }
   .link-info a { word-break: break-all; font-size: 14px; color: var(--muted); }
+  ul.sitemap { list-style: none; padding: 0; }
+  ul.sitemap li { padding: 8px 12px; margin: 4px 0; background: #fff; border-left: 4px solid var(--sage); border-radius: 4px; }
+  .sitemap-url { color: var(--muted); font-size: 13px; word-break: break-all; }
 </style></head><body>
 
 <header>
@@ -214,6 +222,16 @@ REPORT_HTML = """<!DOCTYPE html>
     <p>No recommendations.</p>
     {% endfor %}
   </div>
+
+  {% if site_map %}
+  <h2>Other Pages Reviewed for Context</h2>
+  <p style="color:var(--muted); font-size:14px;">These pages were read to inform recommendations. They were not rewritten.</p>
+  <ul class="sitemap">
+    {% for p in site_map %}
+    <li><a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a><br><span class="sitemap-url">{{ p.url }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 
   {% if link_results is not none %}
   <h2>Broken Links</h2>
@@ -405,6 +423,26 @@ def generate_pdf_bytes(data: dict) -> bytes:
             _mc(pdf,14, _latin1_safe(r.get("note", "")))
             pdf.ln(4)
 
+    # Site map (if used)
+    site_map = data.get("_site_map")
+    if site_map:
+        pdf.ln(10)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(31, 95, 95)
+        pdf.cell(0, 20, "Other Pages Reviewed for Context", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.set_text_color(90, 117, 117)
+        _mc(pdf, 13, "These pages were read to inform recommendations. They were not rewritten.")
+        pdf.ln(2)
+        for p in site_map:
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.set_text_color(59, 122, 87)
+            _mc(pdf, 12, _latin1_safe(p.get("title", "")))
+            pdf.set_font("Helvetica", "", 9)
+            pdf.set_text_color(90, 117, 117)
+            _mc(pdf, 12, _latin1_safe(p.get("url", "")))
+            pdf.ln(3)
+
     # Broken Links (if checked)
     link_results = data.get("_link_results")
     if link_results is not None:
@@ -555,11 +593,18 @@ def send_pdf_email(to_email: str, pdf_bytes: bytes, page_url: str, report_url: s
         )
         if resp.status_code >= 300:
             app.logger.warning(f"Resend error {resp.status_code}: {resp.text}")
-            return False, f"Email service returned error ({resp.status_code})."
+            # Try to surface the readable reason from Resend
+            reason = ""
+            try:
+                j = resp.json()
+                reason = j.get("message") or j.get("error") or ""
+            except Exception:
+                reason = resp.text[:200]
+            return False, f"Resend {resp.status_code}: {reason}"
         return True, "Sent."
     except Exception as e:
         app.logger.warning(f"Failed to send email: {e}")
-        return False, "Failed to send email."
+        return False, f"Network error: {type(e).__name__}"
 
 
 def html_escape(s):
@@ -600,8 +645,9 @@ def review():
         )
 
     check_links_flag = bool(request.form.get("check_links"))
+    use_site_context = bool(request.form.get("use_site_context"))
     try:
-        data = review_page(url, check_links_flag=check_links_flag)
+        data = review_page(url, check_links_flag=check_links_flag, use_site_context=use_site_context)
     except Exception as e:
         app.logger.exception("Review failed")
         return render_template_string(
@@ -642,7 +688,9 @@ def report(report_id):
         status_msg = "We couldn't generate the PDF. Try again, or copy the rewrite text instead."
         status_kind = "error"
     elif status == "emailfail":
-        status_msg = "We couldn't send the email. Please try again shortly."
+        err_path = REPORTS / f"{report_id}.lasterror.txt"
+        detail = err_path.read_text() if err_path.exists() else ""
+        status_msg = f"We couldn't send the email. {detail}".strip()
         status_kind = "error"
     return render_template_string(
         REPORT_HTML,
@@ -661,6 +709,7 @@ def report(report_id):
         status_msg=status_msg,
         status_kind=status_kind,
         link_results=data.get("_link_results"),
+        site_map=data.get("_site_map"),
     )
 
 @app.route("/email-pdf/<report_id>", methods=["POST"])
@@ -681,8 +730,13 @@ def email_pdf(report_id):
         return redirect(url_for("report", report_id=report_id, status="pdffail"))
     base = BASE_URL or request.host_url.rstrip("/")
     report_url = f"{base}/report/{report_id}"
-    ok, _ = send_pdf_email(email, pdf_bytes, data["_url"], report_url)
-    return redirect(url_for("report", report_id=report_id, status="sent" if ok else "emailfail"))
+    ok, msg = send_pdf_email(email, pdf_bytes, data["_url"], report_url)
+    if ok:
+        return redirect(url_for("report", report_id=report_id, status="sent"))
+    # Pass the specific error back so we can debug
+    err_path = REPORTS / f"{report_id}.lasterror.txt"
+    err_path.write_text(msg)
+    return redirect(url_for("report", report_id=report_id, status="emailfail"))
 
 
 @app.route("/healthz")

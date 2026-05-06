@@ -171,6 +171,101 @@ def _extract_links(soup, base_url: str) -> list[tuple[str, str]]:
     return out
 
 
+def crawl_site_context(source_url: str, max_pages: int = 8, timeout: int = 10) -> list[dict]:
+    """
+    Fetch the site's homepage and a handful of internal pages to build a context map.
+    Returns a list of {url, title, excerpt} dicts.
+    Only fetches pages on the same host as source_url. Skips the source page itself.
+    """
+    from urllib.parse import urljoin, urlparse
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    parsed = urlparse(source_url)
+    host = parsed.netloc.lower()
+    if not host:
+        return []
+    root = f"{parsed.scheme}://{parsed.netloc}/"
+
+    headers = {"User-Agent": "Mozilla/5.0 (RewriteMyWebsite/1.0 SiteContext)"}
+
+    # Step 1: fetch the homepage (and the source page if different) to discover links
+    candidates = set()
+    seeds = {root, source_url}
+    for seed in seeds:
+        try:
+            r = requests.get(seed, headers=headers, timeout=timeout)
+            if r.status_code >= 400:
+                continue
+            soup = BeautifulSoup(r.text, "html.parser")
+            for a in soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if not href or href.startswith(("#", "mailto:", "tel:", "javascript:", "sms:")):
+                    continue
+                full = urljoin(seed, href).split("#", 1)[0]
+                p = urlparse(full)
+                if p.scheme not in ("http", "https"):
+                    continue
+                if p.netloc.lower() != host:
+                    continue
+                # Skip files
+                if re.search(r"\.(pdf|jpg|jpeg|png|gif|svg|webp|mp4|mp3|zip|docx?|xlsx?)(\?|$)", full, re.I):
+                    continue
+                # Skip the source page
+                if full.rstrip("/") == source_url.rstrip("/"):
+                    continue
+                candidates.add(full)
+        except Exception:
+            continue
+
+    # Score candidates: prefer shorter paths (top-level pages) and those with shelter-relevant keywords
+    keywords = ("adopt", "surrender", "rehome", "foster", "volunteer", "donate",
+                "lost", "found", "contact", "about", "service", "program", "help",
+                "spay", "neuter", "license", "event", "shelter", "rescue")
+
+    def score(u: str) -> int:
+        path = urlparse(u).path.lower()
+        depth = path.strip("/").count("/")
+        kw_hits = sum(1 for k in keywords if k in path)
+        # Lower is better; depth penalized, keyword matches help
+        return depth * 10 - kw_hits * 5
+
+    ranked = sorted(candidates, key=score)[:max_pages]
+
+    # Step 2: fetch each in parallel and extract title + excerpt
+    def fetch_one(u: str):
+        try:
+            r = requests.get(u, headers=headers, timeout=timeout)
+            if r.status_code >= 400:
+                return None
+            soup = BeautifulSoup(r.text, "html.parser")
+            for tag in soup(["script", "style", "noscript"]):
+                tag.decompose()
+            title = (soup.title.string if soup.title else "").strip()
+            h1 = soup.find("h1")
+            if h1:
+                h1_text = h1.get_text(" ", strip=True)
+                if h1_text and len(h1_text) > len(title or ""):
+                    title = h1_text
+            body = soup.body or soup
+            text = body.get_text(" ", strip=True)
+            text = re.sub(r"\s+", " ", text)
+            excerpt = text[:300]
+            return {"url": u, "title": title or u, "excerpt": excerpt}
+        except Exception:
+            return None
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(6, len(ranked) or 1)) as ex:
+        futures = [ex.submit(fetch_one, u) for u in ranked]
+        for fut in as_completed(futures):
+            r = fut.result()
+            if r:
+                results.append(r)
+    # Sort by score so output order is stable and meaningful
+    results.sort(key=lambda r: score(r["url"]))
+    return results
+
+
 def check_links(links: list[tuple[str, str]], max_workers: int = 10, timeout: int = 8) -> list[dict]:
     """Check each link with HEAD (fallback GET). Returns list of {url, text, status, note}."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -206,16 +301,32 @@ def check_links(links: list[tuple[str, str]], max_workers: int = 10, timeout: in
     return results
 
 
-def review_page(url: str, check_links_flag: bool = False) -> dict:
+def review_page(url: str, check_links_flag: bool = False, use_site_context: bool = False) -> dict:
     title, text, links = fetch_page(url)
     client = anthropic.Anthropic()
+
+    site_context = ""
+    site_map = []
+    if use_site_context:
+        site_map = crawl_site_context(url)
+        if site_map:
+            lines = []
+            for p in site_map:
+                lines.append(f"- {p['url']}\n  Title: {p['title']}\n  Excerpt: {p['excerpt']}")
+            site_context = (
+                "\n\nOTHER PAGES ON THIS SITE (for context only — do NOT rewrite these):\n"
+                + "\n".join(lines)
+                + "\n\nUse this site map when making recommendations. Suggest linking to existing pages "
+                "instead of duplicating content. Flag information that contradicts or duplicates other pages. "
+                "Suggest pages that should be added if they appear to be missing."
+            )
     msg = client.messages.create(
         model="claude-opus-4-5",
         max_tokens=4096,
         system=RUBRIC,
         messages=[{
             "role": "user",
-            "content": f"Page title: {title}\nURL: {url}\n\nPage content:\n---\n{text}\n---\n\nReview and return the JSON as specified."
+            "content": f"Page title: {title}\nURL: {url}\n\nPage content:\n---\n{text}\n---{site_context}\n\nReview and return the JSON as specified."
         }]
     )
     raw = msg.content[0].text.strip()
@@ -229,6 +340,7 @@ def review_page(url: str, check_links_flag: bool = False) -> dict:
         data["_link_results"] = check_links(links)
     else:
         data["_link_results"] = None
+    data["_site_map"] = site_map if use_site_context else None
     return data
 
 
